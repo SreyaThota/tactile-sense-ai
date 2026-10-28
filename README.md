@@ -21,6 +21,7 @@ tactile sensor:
 > **Evidence:**
 > - [results/](results/README.md): metrics, plots, example images, demo screenshots
 > - [project document](results/documentation/TactileSense_AI_Project_Document.md)
+> - [38-second video walkthrough](results/demo/tactilesense_demo.mp4)
 > - [demo script](results/demo/demo_script.md)
 
 This is an independent portfolio project. It uses a public dataset; no physical tactile sensor was used by the author.

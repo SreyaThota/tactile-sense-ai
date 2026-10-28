@@ -10,3 +10,5 @@ pandas==3.1.0
 PyYAML==6.0.3
 streamlit==1.66.1
 pytest==9.1.1
+# Only for scripts/make_demo_video.py (bundles an ffmpeg binary)
+imageio-ffmpeg==0.6.0
