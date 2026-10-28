@@ -1,0 +1,61 @@
+# TactileSense AI configuration. All paths are relative to the repository root.
+seed: 42
+
+data:
+  # "tactile_mnist" reads the Real Tactile MNIST parquet files (see data/README.md).
+  # "folder" reads a folder-per-class dataset: <folder_root>/<class_name>/<image files>.
+  source: tactile_mnist
+  raw_dir: data/raw/tactile-mnist-real-64
+  cache_path: data/processed/tactile_mnist_real_64.npz
+  folder_root: data/folder_dataset
+  # Use every n-th touch of each object (1 = all 256 touches). Larger values make runs faster.
+  touch_stride: 1
+  # Optional cap on objects per official split (null = all). Used for quick smoke tests.
+  max_objects: null
+  # Fraction of training *objects* held out for validation (grouped, stratified by class).
+  val_fraction: 0.2
+  # Only used by the folder source, which has no official test split.
+  test_fraction: 0.2
+
+preprocessing:
+  image_size: 64            # images are resized to image_size x image_size
+  blur_kernel: 5            # Gaussian kernel (odd) used before contact segmentation
+  diff_threshold: 15        # per-pixel |frame - reference| threshold (0-255 scale)
+  morph_kernel: 3           # opening kernel to remove isolated noisy pixels
+  min_contact_fraction: 0.02  # frames with a smaller contact area count as "no contact"
+  # Frames without detected contact show only the bare gel and carry no class information.
+  # When true they are excluded from training and from the primary evaluation.
+  drop_no_contact: true
+
+features:
+  hog_cell: 8
+  hog_block: 16
+  hog_bins: 9
+  hist_bins: 16
+
+classical:
+  max_train_samples: 15000  # RBF-SVM training is O(n^2); subsample for laptop-friendly runtime
+  pca_components: 128
+  svm_c: 10.0
+  svm_gamma: scale
+
+cnn:
+  batch_size: 128
+  max_epochs: 25
+  learning_rate: 0.001
+  weight_decay: 0.0001
+  early_stopping_patience: 5
+  dropout: 0.3
+  num_threads: 8
+  augment:
+    max_shift: 4            # pixels; touch position is random anyway, so small shifts are physical
+    intensity_scale: 0.15   # +/- relative contact-signal strength (pressure / gel variation)
+
+paths:
+  models_dir: models
+  reports_dir: reports
+
+evaluation:
+  latency_runs: 200
+  fusion_touches: [1, 2, 4, 8, 16, 32]
+  fusion_trials: 20
