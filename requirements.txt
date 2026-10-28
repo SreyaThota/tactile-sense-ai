@@ -1,0 +1,12 @@
+# Tested with Python 3.14.6 on Windows 11, CPU only.
+numpy==2.5.4
+# OpenCV 4.x: the 5.0 wheel no longer ships cv2.HOGDescriptor. Headless = no GUI dependencies.
+opencv-python-headless==4.14.0.94
+torch==2.14.1
+torchvision==0.29.1
+scikit-learn==1.9.1
+matplotlib==3.11.2
+pyarrow==26.0.0
+PyYAML==6.0.3
+streamlit==1.66.1
+pytest==9.1.1
