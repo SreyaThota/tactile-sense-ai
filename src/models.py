@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 import torch
+from sklearn.calibration import CalibratedClassifierCV
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -15,14 +16,15 @@ def build_classical_model(cfg: dict, seed: int) -> Pipeline:
     """Standardise -> PCA -> RBF-SVM.
 
     PCA compresses the ~1.8k-dimensional HOG vector, which makes the kernel SVM much faster and
-    less prone to overfitting. ``probability=True`` enables Platt-scaled class probabilities
-    for the demo's confidence display.
+    less prone to overfitting. Sigmoid (Platt) calibration turns SVM decision values into class
+    probabilities for the demo's confidence display.
     """
+    svm = SVC(C=cfg["svm_c"], gamma=cfg["svm_gamma"], random_state=seed)
     return Pipeline(
         [
             ("scale", StandardScaler()),
             ("pca", PCA(n_components=cfg["pca_components"], random_state=seed)),
-            ("svm", SVC(C=cfg["svm_c"], gamma=cfg["svm_gamma"], probability=True, random_state=seed)),
+            ("svm", CalibratedClassifierCV(svm, method="sigmoid", cv=3, ensemble=False)),
         ]
     )
 
