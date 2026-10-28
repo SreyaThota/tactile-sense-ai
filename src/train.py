@@ -198,22 +198,31 @@ def train_cnn(data: ExperimentData, cfg: dict, models_dir: Path) -> dict[str, An
     num_classes = len(data.train.class_names)
     model = TactileCNN(num_classes, ccfg["dropout"])
     optimizer = torch.optim.AdamW(model.parameters(), lr=ccfg["learning_rate"], weight_decay=ccfg["weight_decay"])
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=2)
+    # Checkpoint selection, early stopping and LR schedule all follow one validation metric.
+    # Validation loss can rise through over-confidence while accuracy still improves, so
+    # "val_acc" (the metric we report) is the default; "val_loss" is also supported.
+    metric = ccfg["selection_metric"]
+    if metric not in ("val_acc", "val_loss"):
+        raise ValueError(f"selection_metric must be 'val_acc' or 'val_loss', got '{metric}'")
+    sign = 1.0 if metric == "val_acc" else -1.0  # higher score = better
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="max", factor=0.5, patience=2)
     loss_fn = nn.CrossEntropyLoss()
-    log.info("CNN: %d parameters, %d train / %d val frames", count_parameters(model), len(y_train), len(y_val))
+    log.info("CNN: %d parameters, %d train / %d val frames, selecting on %s",
+             count_parameters(model), len(y_train), len(y_val), metric)
 
     history = {"train_loss": [], "train_acc": [], "val_loss": [], "val_acc": [], "lr": []}
-    best_loss, best_state, best_epoch, bad_epochs = float("inf"), None, 0, 0
+    best_score, best_state, best_epoch, bad_epochs = -float("inf"), None, 0, 0
     t0 = time.perf_counter()
     for epoch in range(1, ccfg["max_epochs"] + 1):
         tl, ta = _run_epoch(model, x_train, y_train, ccfg["batch_size"], loss_fn, optimizer, ccfg["augment"], gen)
         vl, va = _run_epoch(model, x_val, y_val, ccfg["batch_size"], loss_fn)
-        scheduler.step(vl)
+        score = sign * (va if metric == "val_acc" else vl)
+        scheduler.step(score)
         for k, v in zip(history, (tl, ta, vl, va, optimizer.param_groups[0]["lr"])):
             history[k].append(v)
         log.info("epoch %2d  train loss %.3f acc %.3f | val loss %.3f acc %.3f", epoch, tl, ta, vl, va)
-        if vl < best_loss - 1e-4:
-            best_loss, best_state, best_epoch, bad_epochs = vl, copy.deepcopy(model.state_dict()), epoch, 0
+        if score > best_score + 1e-4:
+            best_score, best_state, best_epoch, bad_epochs = score, copy.deepcopy(model.state_dict()), epoch, 0
         else:
             bad_epochs += 1
             if bad_epochs >= ccfg["early_stopping_patience"]:
@@ -228,6 +237,7 @@ def train_cnn(data: ExperimentData, cfg: dict, models_dir: Path) -> dict[str, An
             "dropout": ccfg["dropout"],
             "class_names": data.train.class_names,
             "best_epoch": best_epoch,
+            "selection_metric": metric,
             "history": history,
         },
         models_dir / CNN_FILE,

@@ -82,6 +82,15 @@ def main() -> None:
         fit_eval("Control: raw 16x16 grey difference pixels", raw_pixels(train.images, data.reference), y_tr,
                  raw_pixels(data.val.images, data.reference), y_va, ccfg, seed),
     ]
+
+    # Leakage demonstration (NOT a valid result): split the same train+val pool randomly by
+    # frame, so touches of one object can land on both sides. Same features and pipeline.
+    pool_x = np.concatenate([f_tr, f_va])
+    pool_y = np.concatenate([y_tr, y_va])
+    perm = rng.permutation(len(pool_y))
+    cut = len(f_tr)
+    rows.append(fit_eval("Leaky control: same features, random frame-level split (invalid protocol)",
+                         pool_x[perm[:cut]], pool_y[perm[:cut]], pool_x[perm[cut:]], pool_y[perm[cut:]], ccfg, seed))
     out = {
         "split_used": "validation (test set untouched)",
         "train_samples_per_variant": int(len(train)),
