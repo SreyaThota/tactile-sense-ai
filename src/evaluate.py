@@ -27,6 +27,9 @@ from . import visualization as viz
 
 log = logging.getLogger(__name__)
 
+DEMO_FILE = "demo_examples.npz"
+DEMO_PER_CLASS = 50
+
 
 def classification_metrics(y_true: np.ndarray, probs: np.ndarray, class_names: list[str]) -> dict[str, Any]:
     y_pred = probs.argmax(1)
@@ -98,6 +101,7 @@ def run_evaluation(cfg: dict) -> dict[str, Any]:
             "frames_total": int(len(data.test_all)),
             "frames_with_contact": int(len(test)),
             "objects_with_contact_frames": int(len(np.unique(test.groups))),
+            "contact_frames_per_class": {c: int((test.labels == i).sum()) for i, c in enumerate(names)},
         },
         "models": {},
     }
@@ -141,6 +145,11 @@ def run_evaluation(cfg: dict) -> dict[str, Any]:
     viz.plot_preprocessing_steps(example, predictor.reference, region, p["blur_kernel"], reports / "preprocessing_pipeline.png")
 
     rng = np.random.default_rng(cfg["seed"])
+    # Small set of held-out contact frames for the demo app (avoids loading the full cache there).
+    demo_idx = np.concatenate([rng.permutation(np.flatnonzero(test.labels == c))[:DEMO_PER_CLASS]
+                               for c in range(len(names))])
+    np.savez_compressed(models_dir / DEMO_FILE, images=test.images[demo_idx], labels=test.labels[demo_idx])
+
     for model, probs in probs_by_model.items():
         pred, conf = probs.argmax(1), probs.max(1)
         for kind, mask in (("correct", pred == test.labels), ("failures", pred != test.labels)):
@@ -151,8 +160,10 @@ def run_evaluation(cfg: dict) -> dict[str, Any]:
                                   f"{viz.LABELS[model]}: {'correct predictions' if kind == 'correct' else 'failure cases'}",
                                   reports / f"examples_{model}_{kind}.png")
 
-    for m in results["models"].values():
-        m.pop("report_text")
+    with open(reports / "classification_report.txt", "w", encoding="utf-8") as f:
+        for model, m in results["models"].items():
+            f.write(f"=== {viz.LABELS[model]} - held-out test set, contact frames (n={len(test)}) ===\n")
+            f.write(m.pop("report_text") + "\n")
     (reports / "metrics.json").write_text(json.dumps(results, indent=2))
     (reports / "comparison.md").write_text(comparison_table(results))
     log.info("Wrote metrics and figures to %s\n%s", reports, comparison_table(results))

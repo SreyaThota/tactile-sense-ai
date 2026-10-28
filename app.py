@@ -5,14 +5,17 @@ Run from the repository root:  streamlit run app.py
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import cv2
 import numpy as np
 import pandas as pd
 import streamlit as st
 
 from src.config import load_config, resolve
+from src.evaluate import DEMO_FILE
 from src.inference import ModelNotAvailableError, TactilePredictor
-from src.preprocessing import contact_area_batch, decode_image, image_statistics, to_rgb
+from src.preprocessing import decode_image, image_statistics, to_rgb
 from src.visualization import COLORS, LABELS, plot_preprocessing_steps
 
 st.set_page_config(page_title="TactileSense AI", page_icon=":material/touch_app:", layout="wide")
@@ -25,19 +28,14 @@ def get_predictor(models_dir: str) -> TactilePredictor:
     return TactilePredictor(models_dir)
 
 
-@st.cache_data(max_entries=1, show_spinner="Loading held-out test frames...")
-def load_test_examples(cache_path: str, models_dir: str) -> tuple[np.ndarray, np.ndarray] | None:
-    """Test-split frames with detected contact, read from the local dataset cache (if present)."""
-    path = resolve(cache_path)
+@st.cache_data(max_entries=1)
+def load_test_examples(models_dir: str) -> tuple[np.ndarray, np.ndarray] | None:
+    """Held-out test frames with detected contact, written by `python -m src.evaluate`."""
+    path = Path(models_dir) / DEMO_FILE
     if not path.is_file():
         return None
     with np.load(path, allow_pickle=False) as z:
-        test = z["official_split"] == "test"
-        images, labels = z["images"][test], z["labels"][test]
-    predictor = get_predictor(models_dir)
-    area = contact_area_batch(images, predictor.reference, predictor.pre_cfg)
-    keep = area >= predictor.pre_cfg["min_contact_fraction"]
-    return images[keep], labels[keep]
+        return z["images"], z["labels"]
 
 
 def enlarge(image: np.ndarray, size: int = 256) -> np.ndarray:
@@ -86,9 +84,9 @@ if source == "Upload image":
         "lighting set-ups will not be processed meaningfully."
     )
 else:
-    examples = load_test_examples(CFG["data"]["cache_path"], models_dir)
+    examples = load_test_examples(models_dir)
     if examples is None:
-        st.warning("Dataset cache not found. Run `python scripts/prepare_data.py` or upload an image.",
+        st.warning("No demo examples found. Run `python -m src.evaluate` or upload an image.",
                    icon=":material/warning:")
     else:
         ex_images, ex_labels = examples
