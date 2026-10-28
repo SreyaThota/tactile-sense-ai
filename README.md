@@ -14,9 +14,14 @@ tactile sensor:
 - honest evaluation, including the cases where the models fail
 - a Streamlit demo
 
-> **Status (2026-10-28):** code, tests (26 passing) and the end-to-end smoke test are complete. The full training
-> run on the real dataset is in progress, so the [Results](#results) section will be filled from
-> `reports/metrics.json` once it finishes. No numbers in this README are estimated or invented.
+> **Result in one line:** on 100 unseen physical objects, both models identify the digit from a *single* touch with
+> ~17% accuracy (chance 10%, both significantly above it, neither significantly better than the other). Averaging
+> 32 touches of the same object raises this to 32-36%.
+>
+> **Evidence:**
+> - [results/](results/README.md): metrics, plots, example images, demo screenshots
+> - [project document](results/documentation/TactileSense_AI_Project_Document.md)
+> - [demo script](results/demo/demo_script.md)
 
 This is an independent portfolio project. It uses a public dataset; no physical tactile sensor was used by the author.
 
@@ -53,7 +58,7 @@ flowchart LR
 **ML workflow:** download the data, then validate it (decodability, duplicates, label consistency, class balance).
 Split by **physical object**, so the official test objects are never seen in training. Estimate the no-contact
 reference on training frames only and drop frames with no contact. Train the HOG + SVM and the CNN, selecting the
-CNN by validation loss. Then evaluate both saved checkpoints once on the held-out test set.
+CNN checkpoint by validation accuracy. Then evaluate both saved checkpoints once on the held-out test set.
 
 ## Dataset
 
@@ -73,9 +78,9 @@ about the class. A touch that does hit the digit usually sees only a fragment of
 classification is therefore much harder than ordinary MNIST, and this is reflected in the results.
 
 The image-based contact detector was sanity-checked against an independent physical signal: the gel height at
-touch time from the robot's kinematics. In an exploratory check on 6,400 test frames, the detected contact area
-correlated with gel height (Pearson r = 0.54-0.56, depending on the threshold), as expected if the detector responds
-to real contact. The value for the final configuration is reported in Results.
+touch time from the robot's kinematics. Over all 25,600 test frames, the detected contact area correlates with gel
+height at **Pearson r = 0.59** ([plot](results/plots/contact_vs_gel_height.png)), as expected if the detector
+responds to real contact. Gel height is used only for this check, never as a model input.
 
 Download and preparation: see [data/README.md](data/README.md).
 
@@ -131,9 +136,11 @@ Force, slip and pose are **not** estimated: the dataset has no labels for them.
   dropout 0.3 and a linear layer. **288,746 parameters**; trains on a laptop CPU.
 - Training:
   - cross-entropy loss, AdamW (lr 1e-3, weight decay 1e-4), batch size 128
-  - ReduceLROnPlateau scheduler; early stopping after 5 epochs without improvement (max 25 epochs)
+  - ReduceLROnPlateau scheduler and early stopping (patience 5, max 25 epochs), both on validation accuracy
   - fixed seeds for reproducibility
-- The checkpoint with the **lowest validation loss** is saved, not the last epoch.
+- The checkpoint with the **highest validation accuracy** is saved, not the last epoch (`selection_metric` in
+  `config.yaml`). Validation loss rose through over-confidence while accuracy was still improving, so loss-based
+  selection would have kept a worse epoch-2 model.
 - Augmentation is restricted to physically plausible changes:
   - random translation of ±4 px. The touch position is random anyway, and zero padding means "no deformation".
   - ±15% contact-signal scaling, to cover pressure and gel variation.
@@ -142,18 +149,81 @@ Force, slip and pose are **not** estimated: the dataset has no labels for them.
 
 ## Results
 
-**In progress.** The full run on all 153,600 frames is training now. This section will report, from the saved
-outputs only:
-- test accuracy, macro precision/recall/F1 and per-class metrics for both models
-- confusion matrices
-- single-image CPU latency
-- multi-touch fusion accuracy per object
-- a validation-only diagnosis of the HOG + SVM baseline: train-vs-validation accuracy, a feature ablation and a
-  raw-pixel control
-- one analysed failure case
+All numbers come from the final run (`reports/metrics.json`, copied to [results/metrics/](results/metrics)).
+The test set is the **official test split: 100 physical objects never used for training or model selection**,
+of which 7,798 frames show detected contact. CIs are 95% bootstrap intervals over the 100 test **objects**,
+because frames of one object are correlated.
 
-The first full-data HOG + SVM fit reached **0.169 validation accuracy** (chance = 0.10), which is weak. That result
-will be reported and analysed, not hidden.
+| Held-out test set | CNN | HOG + SVM |
+|---|---|---|
+| Accuracy, single frame (chance = 0.10) | **0.174** [0.141, 0.208] | **0.171** [0.146, 0.201] |
+| Macro precision | 0.187 | 0.170 |
+| Macro recall | 0.181 | 0.183 |
+| Macro-F1 | **0.181** [0.142, 0.208] | **0.159** [0.138, 0.174] |
+| Accuracy on all 25,600 frames incl. no-contact | 0.109 | 0.116 |
+| Object accuracy, 8 touches averaged | 0.265 | 0.301 |
+| Object accuracy, 32 touches averaged | 0.316 | 0.359 |
+| Training data | 29,968 frames | 15,000 frames (subsample) |
+| Training time (laptop CPU) | ~66 min, 16 epochs, best = epoch 11 | 82 s fit + 69 s features |
+| Latency, 1 image incl. preprocessing, 1 CPU thread (median / p95) | 6.44 / 9.54 ms | 4.96 / 7.07 ms |
+
+Latency was measured with `time.perf_counter` over 200 single-image `predict()` calls after 5 warm-up calls,
+with `torch.set_num_threads(1)`. It covers resize, preprocessing or feature extraction, and the model.
+
+![Model comparison](results/plots/model_comparison.png)
+
+| CNN confusion matrix | HOG + SVM confusion matrix |
+|---|---|
+| ![CNN](results/plots/confusion_matrix_cnn.png) | ![SVM](results/plots/confusion_matrix_classical.png) |
+
+### What the results mean
+
+- **Both models learn real tactile signal.** Their CIs lie above the 0.10 chance level.
+- **The CNN does not beat the classical baseline on this test set.** The CNN − SVM difference intervals contain 0:
+  accuracy [−0.034, +0.041], macro-F1 [−0.011, +0.053]. The CNN's higher macro-F1 is within noise. The SVM fuses
+  slightly better across touches, but 100 test objects cannot separate them either.
+- **The information in a single touch is the bottleneck.** A touch typically sees a fragment of one stroke, so
+  "1"/"4"/"9" and "3"/"5" are frequently confused. Averaging probabilities over more touches of the same object
+  steadily improves accuracy ([fusion curve](results/plots/multi_touch_fusion.png)). This matches what the dataset
+  was designed for: multi-touch active perception.
+- **The CNN overfits despite augmentation.** Training accuracy reached 0.45 while validation peaked at 0.19
+  ([curves](results/plots/training_curves.png)).
+
+### The weak HOG + SVM baseline, investigated (validation split only)
+
+| Variant (6,000 training frames, same Scaler → PCA → SVM) | Train acc. | Val acc. |
+|---|---|---|
+| All hand-crafted features | 1.000 | 0.161 |
+| HOG only | 1.000 | 0.165 |
+| Contact statistics only (28-D) | 0.538 | 0.122 |
+| Raw 16x16 difference pixels (control) | 0.822 | 0.113 |
+| Leaky control: same features, random frame-level split | 1.000 | 0.236 |
+
+The baseline **memorises training objects** (100% train accuracy) and generalises poorly. HOG carries the useful
+signal; contact statistics and raw pixels are near chance. The leaky control shows why splitting by object is
+essential: a frame-level split would report **0.236 instead of 0.161** (+46% relative), purely from leakage.
+Produced by `python scripts/analyze_baseline.py`.
+
+### Failure case
+
+![Failure case](results/images/prediction_failure_example.png)
+
+**What happened:** the most confident wrong CNN prediction on the test set. A true **6** was classified as **8
+with 99.7% confidence**; the SVM said 3 at 17.6%.
+
+**Why:**
+- **There is no digit stroke in the frame.** It shows a broad, diffuse change, which the threshold-based detector
+  counts as 14% contact.
+- **The robot measured a low gel height.** It was 4.75 mm, below the 10th percentile of test contact frames
+  (6.08 mm; median 8.71 mm). The sensor most likely pressed the rubber mat beside the digit. So this is a
+  **contact-detector false positive**, followed by a CNN that is confidently wrong on an image with no class evidence.
+
+**The general pattern:** CNN predictions with confidence ≥ 0.9 are correct only **18.8%** of the time (96 test
+frames), so its confidence is not calibrated. The SVM's calibrated probabilities never exceed 0.3: less
+informative, but not misleading.
+
+More examples: [correct CNN predictions](results/images/examples_cnn_correct.png),
+[CNN failures](results/images/examples_cnn_failures.png).
 
 ## Installation and usage
 
@@ -193,6 +263,11 @@ Diagnose the baseline (validation split only):
 python scripts/analyze_baseline.py
 ```
 
+Rebuild the `results/` package (metrics, plots, example images, bootstrap CIs) from the saved outputs:
+```bash
+python scripts/build_results.py
+```
+
 Fast end-to-end software check on a small subset. It writes to `models/smoke/` and `reports/smoke/`; its metrics are
 **not** results.
 ```bash
@@ -221,7 +296,13 @@ All settings (image size, thresholds, HOG parameters, SVM and CNN hyper-paramete
 - compare CNN and HOG + SVM predictions with their class probabilities
 
 The app warns when no contact is detected, because the prediction is then meaningless. It shows a clear message
-when no trained model is available.
+when no trained model is available. Test-set examples come from `models/demo_examples.npz`: 50 held-out contact
+frames per digit, written by `src/evaluate.py`.
+
+![Streamlit demo](results/images/streamlit_demo_prediction.png)
+
+*Screenshot of the running app with the final models: here the CNN is right and the SVM is wrong. Both are wrong on
+many other frames. Video plan: [results/demo/demo_script.md](results/demo/demo_script.md).*
 
 ## Project structure
 
@@ -244,6 +325,7 @@ scripts/
   analyze_baseline.py      validation-only diagnosis of the baseline
   build_results.py         assembles results/ from the saved outputs
 tests/                     pytest suite with clearly labelled synthetic fixtures
+results/                   final metrics, plots, images, demo script and project documentation
 data/README.md             dataset documentation
 ```
 
@@ -254,13 +336,17 @@ data/README.md             dataset documentation
 - **One sensor, one set-up.** The no-contact reference and the models are specific to GelSight Mini images from
   this dataset. Other sensors, gels or lighting need a new reference and retraining.
 - **Low resolution.** The 64x64 version was chosen for CPU training; the 320x240 frames contain more detail.
-- **Contact segmentation uses a fixed threshold.** It is validated against gel height, but very light contacts can
-  be missed.
+- **Contact segmentation uses a fixed threshold.** It is validated against gel height (r = 0.59), but it misses
+  light contacts and can fire on diffuse deformation from the mat (see the failure case).
+- **The CNN's confidence is not calibrated.** Predictions at ≥ 0.9 confidence are right only 18.8% of the time.
+- **Small test set at the object level.** There are 100 test objects, so differences of a few percentage points
+  between models are not statistically resolvable.
 - **Offline only.** There was no real-time integration with a robot and no physical hardware testing.
 
 ## Future work
 
-- Fuse sequences of touches: active perception, deciding where to touch next.
+- Fuse sequences of touches together with the touch position known from the robot (active perception).
+- Calibrate the CNN (temperature scaling) and replace the fixed-threshold contact detector with a learned one.
 - Train at 320x240 and use self-supervised tactile pre-training (e.g. Sparsh-style encoders).
 - Regress contact pose or force on datasets that provide those labels.
 - Test on a physical GelSight/DIGIT sensor.

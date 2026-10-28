@@ -1,0 +1,43 @@
+{
+  "split_used": "validation (test set untouched)",
+  "train_samples_per_variant": 6000,
+  "val_samples": 7434,
+  "chance_accuracy": 0.1,
+  "variants": [
+    {
+      "variant": "All hand-crafted features (HOG + histograms + contact geometry)",
+      "feature_dim": 1792,
+      "train_accuracy": 1.0,
+      "val_accuracy": 0.1614,
+      "fit_s": 48.3
+    },
+    {
+      "variant": "HOG only",
+      "feature_dim": 1764,
+      "train_accuracy": 1.0,
+      "val_accuracy": 0.1649,
+      "fit_s": 28.1
+    },
+    {
+      "variant": "Contact statistics only (histogram, colour stats, geometry)",
+      "feature_dim": 28,
+      "train_accuracy": 0.538,
+      "val_accuracy": 0.1223,
+      "fit_s": 16.8
+    },
+    {
+      "variant": "Control: raw 16x16 grey difference pixels",
+      "feature_dim": 256,
+      "train_accuracy": 0.8223,
+      "val_accuracy": 0.1129,
+      "fit_s": 24.9
+    },
+    {
+      "variant": "Leaky control: same features, random frame-level split (invalid protocol)",
+      "feature_dim": 1792,
+      "train_accuracy": 1.0,
+      "val_accuracy": 0.2359,
+      "fit_s": 29.9
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+model,accuracy,macro_precision,macro_recall,macro_f1,accuracy_all_frames,object_acc_1_touch,object_acc_8_touches,object_acc_32_touches,train_samples,train_time_s,latency_median_ms,latency_p95_ms
+CNN,0.1741,0.1874,0.181,0.1806,0.1089,0.189,0.265,0.3155,29968,3971.2,6.44,9.54
+HOG + SVM,0.1709,0.1703,0.1831,0.1588,0.1157,0.1915,0.301,0.359,15000,82.18,4.96,7.07

@@ -1,0 +1,210 @@
+{
+  "dataset": "Real Tactile MNIST (TimSchneider42/tactile-mnist-touch-real-single-t256-64x64), CC-BY-2.0",
+  "task": "10-class digit classification of the touched 3D-printed object from one GelSight Mini frame",
+  "data": {
+    "train": {
+      "frames_total": 102400,
+      "frames_with_contact": 29968,
+      "frames_used": 29968,
+      "objects": 400
+    },
+    "val": {
+      "frames_total": 25600,
+      "frames_with_contact": 7434,
+      "frames_used": 7434,
+      "objects": 100
+    },
+    "test": {
+      "frames_total": 25600,
+      "frames_with_contact": 7798,
+      "frames_used": 7798,
+      "objects": 100
+    }
+  },
+  "test_set": {
+    "description": "Official Real Tactile MNIST test split (objects never seen in training/validation)",
+    "objects": 100,
+    "frames_total": 25600,
+    "frames_with_contact": 7798,
+    "objects_with_contact_frames": 100,
+    "contact_frames_per_class": {
+      "0": 773,
+      "1": 494,
+      "2": 871,
+      "3": 855,
+      "4": 638,
+      "5": 825,
+      "6": 919,
+      "7": 779,
+      "8": 919,
+      "9": 725
+    }
+  },
+  "training": {
+    "classical": {
+      "train_samples": 15000,
+      "feature_dim": 1792,
+      "feature_extraction_s": 68.93,
+      "fit_time_s": 82.18,
+      "val_accuracy": 0.1574
+    },
+    "cnn": {
+      "parameters": 288746,
+      "epochs_run": 16,
+      "best_epoch": 11,
+      "train_time_s": 3971.2,
+      "val_accuracy_best_epoch": 0.1903,
+      "train_samples": 29968
+    }
+  },
+  "results": {
+    "cnn": {
+      "accuracy": 0.1741472172351885,
+      "macro_precision": 0.18742542759971503,
+      "macro_recall": 0.18097680343124956,
+      "macro_f1": 0.18057083412532157,
+      "accuracy_all_frames_incl_no_contact": 0.1089453125,
+      "object_level_accuracy_by_touches": {
+        "1": 0.189,
+        "2": 0.219,
+        "4": 0.252,
+        "8": 0.265,
+        "16": 0.285,
+        "32": 0.3155
+      },
+      "latency_single_image": {
+        "median_ms": 6.4383500139229,
+        "p95_ms": 9.54148998716846
+      }
+    },
+    "classical": {
+      "accuracy": 0.17094126699153628,
+      "macro_precision": 0.17026210158532917,
+      "macro_recall": 0.18305910814979426,
+      "macro_f1": 0.1588011283734712,
+      "accuracy_all_frames_incl_no_contact": 0.115703125,
+      "object_level_accuracy_by_touches": {
+        "1": 0.1915,
+        "2": 0.235,
+        "4": 0.2615,
+        "8": 0.301,
+        "16": 0.3355,
+        "32": 0.359
+      },
+      "latency_single_image": {
+        "median_ms": 4.958999983500689,
+        "p95_ms": 7.072094996692612
+      }
+    }
+  },
+  "contact_detector_vs_gel_height_pearson_r": 0.5932370664526229,
+  "examples": {
+    "prediction_example": {
+      "true": "8",
+      "cnn": {
+        "predicted": "8",
+        "confidence": 0.4
+      },
+      "classical": {
+        "predicted": "3",
+        "confidence": 0.1795
+      }
+    },
+    "prediction_failure_example": {
+      "true": "6",
+      "contact_area": 0.1399,
+      "gel_height_mm": 4.75,
+      "gel_height_mm_percentiles_10_50_90_of_test_contact_frames": [
+        6.08,
+        8.71,
+        11.48
+      ],
+      "cnn": {
+        "predicted": "8",
+        "confidence": 0.9969
+      },
+      "classical": {
+        "predicted": "3",
+        "confidence": 0.176
+      }
+    }
+  },
+  "confidence_vs_accuracy_test_contact_frames": {
+    "cnn": [
+      {
+        "confidence_bin": "[0.0, 0.3)",
+        "frames": 3429,
+        "accuracy": 0.1374
+      },
+      {
+        "confidence_bin": "[0.3, 0.6)",
+        "frames": 3646,
+        "accuracy": 0.1936
+      },
+      {
+        "confidence_bin": "[0.6, 0.9)",
+        "frames": 627,
+        "accuracy": 0.26
+      },
+      {
+        "confidence_bin": "[0.9, 1.0)",
+        "frames": 96,
+        "accuracy": 0.1875
+      }
+    ],
+    "classical": [
+      {
+        "confidence_bin": "[0.0, 0.3)",
+        "frames": 7798,
+        "accuracy": 0.1709
+      },
+      {
+        "confidence_bin": "[0.3, 0.6)",
+        "frames": 0,
+        "accuracy": null
+      },
+      {
+        "confidence_bin": "[0.6, 0.9)",
+        "frames": 0,
+        "accuracy": null
+      },
+      {
+        "confidence_bin": "[0.9, 1.0)",
+        "frames": 0,
+        "accuracy": null
+      }
+    ]
+  },
+  "bootstrap_95ci_over_test_objects": {
+    "cnn": {
+      "accuracy": [
+        0.1413,
+        0.208
+      ],
+      "macro_f1": [
+        0.1422,
+        0.2085
+      ]
+    },
+    "classical": {
+      "accuracy": [
+        0.1465,
+        0.2012
+      ],
+      "macro_f1": [
+        0.1383,
+        0.1736
+      ]
+    },
+    "cnn_minus_classical": {
+      "accuracy": [
+        -0.0336,
+        0.0409
+      ],
+      "macro_f1": [
+        -0.0113,
+        0.0535
+      ]
+    }
+  }
+}

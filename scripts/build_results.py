@@ -16,6 +16,7 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
+from sklearn.metrics import f1_score
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -105,6 +106,9 @@ def main() -> None:
     # ---- metrics
     shutil.copy(reports / "metrics.json", out / "metrics" / "evaluation_metrics.json")
     shutil.copy(reports / "classification_report.txt", out / "metrics" / "classification_report.txt")
+    for name in ("baseline_analysis.json", "baseline_analysis.md"):
+        if (reports / name).is_file():
+            shutil.copy(reports / name, out / "metrics" / name)
     with open(out / "metrics" / "model_comparison.csv", "w", newline="", encoding="utf-8") as f:
         w = csv.writer(f)
         w.writerow(["model", "accuracy", "macro_precision", "macro_recall", "macro_f1",
@@ -129,10 +133,10 @@ def main() -> None:
     # ---- images (real test-split frames)
     with np.load(resolve(cfg["data"]["cache_path"]), allow_pickle=False) as z:
         test = z["official_split"] == "test"
-        images, labels = z["images"][test], z["labels"][test]
+        images, labels, gel_z, test_groups = z["images"][test], z["labels"][test], z["gel_z"][test], z["groups"][test]
     area = contact_area_batch(images, predictor.reference, predictor.pre_cfg)
     contact = np.flatnonzero(area >= predictor.pre_cfg["min_contact_fraction"])
-    images, labels, area = images[contact], labels[contact], area[contact]
+    images, labels, area, gel_z = images[contact], labels[contact], area[contact], gel_z[contact]
 
     probs = predictor.predict_proba(images, "cnn")
     pred, conf = probs.argmax(1), probs.max(1)
@@ -170,6 +174,38 @@ def main() -> None:
             if src.is_file():
                 shutil.copy(src, out / "images" / f"examples_{model}_{kind}.png")
 
+    # Confidence vs. accuracy: is a high predicted probability trustworthy?
+    calibration = {}
+    for model in predictor.available_models:
+        pr = probs if model == "cnn" else predictor.predict_proba(images, model)
+        pm, cm = pr.argmax(1), pr.max(1)
+        calibration[model] = [
+            {"confidence_bin": f"[{lo:.1f}, {hi:.1f})", "frames": int(m.sum()),
+             "accuracy": round(float((pm[m] == labels[m]).mean()), 4) if m.any() else None}
+            for lo, hi in ((0.0, 0.3), (0.3, 0.6), (0.6, 0.9), (0.9, 1.01))
+            for m in [(cm >= lo) & (cm < hi)]
+        ]
+
+    # Object-level bootstrap: frames of one object are correlated, so resample whole test objects
+    # to get honest 95% intervals for each model and for the CNN - SVM difference.
+    groups = test_groups[contact]
+    preds = {m: (probs if m == "cnn" else predictor.predict_proba(images, m)).argmax(1) for m in predictor.available_models}
+    frames_of = [np.flatnonzero(groups == g) for g in np.unique(groups)]
+    rng = np.random.default_rng(cfg["seed"])
+    boot = {m: {"accuracy": [], "macro_f1": []} for m in preds}
+    for _ in range(2000):
+        # sample objects with replacement; a repeated object contributes its frames repeatedly
+        pick = np.concatenate([frames_of[i] for i in rng.integers(0, len(frames_of), len(frames_of))])
+        for m, p in preds.items():
+            boot[m]["accuracy"].append(float((p[pick] == labels[pick]).mean()))
+            boot[m]["macro_f1"].append(float(f1_score(labels[pick], p[pick], average="macro")))
+    ci = lambda v: [round(float(np.percentile(v, 2.5)), 4), round(float(np.percentile(v, 97.5)), 4)]  # noqa: E731
+    bootstrap = {m: {k: ci(v) for k, v in d.items()} for m, d in boot.items()}
+    if {"cnn", "classical"} <= preds.keys():
+        bootstrap["cnn_minus_classical"] = {
+            k: ci(np.array(boot["cnn"][k]) - np.array(boot["classical"][k])) for k in ("accuracy", "macro_f1")
+        }
+
     summary = {
         "dataset": "Real Tactile MNIST (TimSchneider42/tactile-mnist-touch-real-single-t256-64x64), CC-BY-2.0",
         "task": "10-class digit classification of the touched 3D-printed object from one GelSight Mini frame",
@@ -183,11 +219,20 @@ def main() -> None:
         "contact_detector_vs_gel_height_pearson_r": metrics.get("contact_detector_vs_gel_height_pearson_r"),
         "examples": {
             "prediction_example": {"true": names[labels[ok]], **ok_pred},
-            "prediction_failure_example": {"true": names[labels[fail]], "contact_area": round(float(area[fail]), 4), **fail_pred},
+            "prediction_failure_example": {
+                "true": names[labels[fail]],
+                "contact_area": round(float(area[fail]), 4),
+                "gel_height_mm": round(float(gel_z[fail] * 1000), 2),
+                "gel_height_mm_percentiles_10_50_90_of_test_contact_frames":
+                    [round(float(v), 2) for v in np.percentile(gel_z * 1000, [10, 50, 90])],
+                **fail_pred,
+            },
         },
+        "confidence_vs_accuracy_test_contact_frames": calibration,
+        "bootstrap_95ci_over_test_objects": bootstrap,
     }
     (out / "experiment_summary.json").write_text(json.dumps(summary, indent=2))
-    print(json.dumps(summary["examples"], indent=2))
+    print(json.dumps({k: summary[k] for k in ("examples", "bootstrap_95ci_over_test_objects")}, indent=2))
 
 
 if __name__ == "__main__":
