@@ -26,6 +26,16 @@ tactile sensor:
 
 This is an independent portfolio project. It uses a public dataset; no physical tactile sensor was used by the author.
 
+| | |
+|---|---|
+| **Problem** | Robots need to recognise objects by touch. Vision-based tactile sensors (GelSight) produce images of contact, but turning one touch into a reliable label is hard. |
+| **What I built** | Data validation, OpenCV contact segmentation, a HOG + SVM baseline, a compact PyTorch CNN, multi-touch fusion and a Streamlit demo |
+| **Data** | Real Tactile MNIST: 153,600 GelSight Mini frames from a Franka robot arm, split by **physical object** so test objects are never seen in training |
+| **Key results** | One touch: **~17%** accuracy vs 10% chance (both models) · 32 touches fused: **32–36%** · a frame-level split would have inflated the score by 46% |
+| **Stack** | Python · PyTorch · OpenCV · scikit-learn · Streamlit |
+
+**Jump to:** [Architecture](#system-architecture) · [Results](#results) · [Install and run](#installation-and-usage) · [Limitations](#known-limitations)
+
 ---
 
 ## Why tactile sensing matters in robotics
